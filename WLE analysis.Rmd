@@ -1,0 +1,121 @@
+---
+title: "Analysis on Weight Lifting Exercises Dataset"
+author: "i58165Coursera"
+date: "February 25, 2016"
+output: html_document
+---
+
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, my goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+## Prepare packages
+
+```{r}
+
+library(mlbench)
+library(reshape2)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(randomForest)
+library(data.table)
+library(rattle)
+library(e1071)
+```
+
+## Data Loading
+
+Subset the training dataset to include only the predictors and the outcome variable. Exclude all variables that contain most NA values.
+
+```{r}
+
+training <- read.csv("C:\\Users\\njiang\\Documents\\GitHub\\Machine learning\\pml-training.csv", header = T, sep = ",")
+testing <- read.csv("C:\\Users\\njiang\\Documents\\GitHub\\Machine learning\\pml-testing.csv", header = T, sep = ",")
+# summary(training)
+# summary(testing)
+# Remove empty columns
+isAnyMissing <- sapply(training, function (x) any(is.na(x) | x == ""))
+isPredictor <- !isAnyMissing & grepl("belt|[^(fore)]arm|dumbbell|forearm", names(isAnyMissing))
+predCandidates <- names(isAnyMissing)[isPredictor]
+predCandidates
+varToInclude <- c("classe", predCandidates)
+training <- training[, varToInclude]
+dim(training)
+# Make sure classe is a factor variable
+class(training$classe)
+
+```
+
+## Split Into training and validation dataset
+
+```{r}
+require(caret)
+inTrain <- createDataPartition(training$classe, p=0.6, list=FALSE)
+my_Training <- training[inTrain, ]
+my_Testing <- training[-inTrain, ]
+dim(my_Training); dim(my_Testing)
+```
+
+## Train Model on Training dataset and cross validation
+
+Using random forest, the out of sample error should be small. The error will be estimated using the 40% probing sample. I would be quite happy with an error estimate of 3% or less.
+
+Prediction with Decision Trees
+
+```{r}
+
+set.seed(12345)
+modFitA1 <- rpart(classe ~ ., data=my_Training, method="class")
+fancyRpartPlot(modFitA1)
+predictionsA1 <- predict(modFitA1, my_Testing, type = "class")
+cmtree <- confusionMatrix(predictionsA1, my_Testing$classe)
+cmtree
+# plot(modFitA1)
+
+```
+
+Prediction with Random Forests
+
+```{r}
+set.seed(12345)
+modFitB1 <- randomForest(classe ~ ., data=my_Training)
+predictionB1 <- predict(modFitB1, my_Testing, type = "class")
+cmrf <- confusionMatrix(predictionB1, my_Testing$classe)
+cmrf
+plot(modFitB1)
+```
+
+The estimated error rate is less than 1%.
+
+
+## Predicting Results on the Test Data
+
+Random Forests gave an Accuracy in the Validation dataset of 99.89%, which was more accurate that what I got from the Decision Trees. The expected out-of-sample error is 100-99.89 = 0.11%.
+
+Prediction with Random Forests on testing dataset. Get the result for Course project quiz.
+
+```{r}
+predictionB2 <- predict(modFitB1, testing, type = "class")
+predictionB2
+# Write the results to a text file for submission
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("problem_id_",i,".txt")
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+
+```
+
+## CONCLUSION
+The prediction result of the test data is 
+
+B A A A A E D B A A B C B A E E A B B B.
+
+
+
+# Citation
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
